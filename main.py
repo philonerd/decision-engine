@@ -1,3 +1,4 @@
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -9,6 +10,13 @@ from model import simple_model
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # allow all (for now)
+    allow_credentials=True,
+    allow_methods=["*'],
+    allow_headers=["*],
+)
 # -----------------------------
 # CONFIG
 # -----------------------------
