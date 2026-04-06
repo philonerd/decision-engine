@@ -42,6 +42,8 @@ class LoginInput(BaseModel):
     username: str
     password: str
 
+class UpgradeInput(BaseModel):
+    api_key: str
 # -----------------------------
 # HELPERS
 # -----------------------------
@@ -136,6 +138,8 @@ def register(data: RegisterInput):
 
     return {"client_id": client_id, "api_key": api_key}
 
+
+
 @app.post("/login")
 def login(data: LoginInput):
     conn = sqlite3.connect("data.db")
@@ -151,6 +155,23 @@ def login(data: LoginInput):
         return {"success": False}
 
     return {"success": True, "client_id": user[0], "api_key": user[1]}
+
+
+@app.post("/upgrade")
+def upgrade(data: UpgradeInput):
+
+    conn = sqlite3.connect("data.db")
+    c = conn.cursor()
+
+    c.execute(
+        "UPDATE clients SET plan='pro' WHERE api_key=?",
+        (data.api_key,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return {"status": "upgraded"}
 
 
 # -----------------------------
@@ -180,7 +201,7 @@ def api_predict(data: UserInput, x_api_key: str = Header(...)):
         raise HTTPException(status_code=403, detail="Client mismatch")
 
     if plan == "free" and api_calls >= 100:
-        raise HTTPException(status_code=403, detail="Free limit exceeded")
+        raise HTTPException(status_code=403, detail="Free limit exceeded ! Upgrade to Pro Plan")
 
     conn = sqlite3.connect("data.db")
     c = conn.cursor()
@@ -261,13 +282,63 @@ def home():
 def app_ui():
     return """
     <html>
-    <body style="background:#0f172a;color:white;text-align:center;padding:40px;">
+    <head>
+        <style>
+            body {
+                background:#0f172a;
+                color:white;
+                font-family: 'Segoe UI';
+                text-align:center;
+                padding:40px;
+            }
+
+            .card {
+                background:#1e293b;
+                padding:30px;
+                border-radius:15px;
+                width:300px;
+                margin:auto;
+            }
+
+            input {
+                width:90%;
+                padding:10px;
+                margin:10px 0;
+                border-radius:8px;
+                border:none;
+            }
+
+            button {
+                width:100%;
+                padding:12px;
+                background:#22c55e;
+                border:none;
+                border-radius:8px;
+                cursor:pointer;
+            }
+
+            .result {
+                margin-top:20px;
+                background:#020617;
+                padding:15px;
+                border-radius:10px;
+            }
+        </style>
+    </head>
+
+    <body>
+
         <h1>AI Predictor</h1>
-        <input id="time" placeholder="time"><br><br>
-        <input id="sessions" placeholder="sessions"><br><br>
-        <input id="actions" placeholder="actions"><br><br>
-        <button onclick="predict()">Predict</button>
-        <div id="result"></div>
+
+        <div class="card">
+            <input id="time" placeholder="Time Spent">
+            <input id="sessions" placeholder="Sessions">
+            <input id="actions" placeholder="Actions">
+
+            <button onclick="predict()">Predict</button>
+
+            <div id="result" class="result"></div>
+        </div>
 
         <script>
         async function predict(){
@@ -275,23 +346,30 @@ def app_ui():
                 method:'POST',
                 headers:{
                     'Content-Type':'application/json',
-                    'x-api-key':'d7b4be78-e969-43c3-87ac-38a2a64612c1'
+                    'x-api-key':localStorage.getItem("api_key")
                 },
                 body:JSON.stringify({
-                    client_id:'106b33ae-6050-469d-9484-5136329ad72b',
+                    client_id: localStorage.getItem("client_id"),
                     user_id:1,
                     time_spent:parseFloat(time.value),
                     sessions:parseInt(sessions.value),
                     actions:parseInt(actions.value)
                 })
             });
+
             const data = await res.json();
-            result.innerHTML = JSON.stringify(data);
+
+            result.innerHTML =
+                "<b>Segment:</b> " + data.segment +
+                "<br><b>Score:</b> " + data.score +
+                "<br><b>Action:</b> " + data.auto_action;
         }
         </script>
+
     </body>
     </html>
     """
+
 @app.get("/user-history")
 def get_user_history(client_id: str, user_id: int):
 
@@ -345,3 +423,228 @@ def get_actions(client_id: str):
             for r in rows
         ]
     }
+
+
+@app.get("/", response_class=HTMLResponse)
+def landing():
+    return """
+    <html>
+    <head>
+        <title>Sentria AI</title>
+        <style>
+            body {
+                margin:0;
+                font-family: 'Segoe UI', sans-serif;
+                background: linear-gradient(135deg, #0f172a, #020617);
+                color:white;
+            }
+
+            .container {
+                text-align:center;
+                padding:120px 20px;
+            }
+
+            h1 {
+                font-size:52px;
+                margin-bottom:10px;
+            }
+
+            p {
+                color:#94a3b8;
+                font-size:18px;
+                margin-bottom:30px;
+            }
+
+            .btn {
+                padding:14px 28px;
+                border-radius:10px;
+                border:none;
+                margin:10px;
+                font-size:16px;
+                cursor:pointer;
+            }
+
+            .primary {
+                background:#22c55e;
+                color:white;
+            }
+
+            .secondary {
+                background:#1e293b;
+                color:white;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container">
+            <h1>Sentria AI</h1>
+            <p>AI-powered decision & automation engine for user behavior</p>
+
+            <a href="/app"><button class="btn primary">Launch App</button></a>
+            <a href="/dashboard"><button class="btn secondary">View Dashboard</button></a>
+            <a href="/login"><button class="btn primary">Login</button></a>
+            <a href="/pricing"><button class="btn secondary">Pricing</button></a>
+            <a href="/app"><button class="btn primary">Try Demo</button></a>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+
+    conn = sqlite3.connect("data.db")
+    c = conn.cursor()
+
+    c.execute("SELECT segment, COUNT(*) FROM user_history GROUP BY segment")
+    data = c.fetchall()
+
+    conn.close()
+
+    labels = [d[0] for d in data]
+    values = [d[1] for d in data]
+
+    return f"""
+    <html>
+    <head>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            body {{
+                background:#0f172a;
+                color:white;
+                font-family: 'Segoe UI';
+                padding:40px;
+            }}
+
+            .grid {{
+                display:flex;
+                justify-content:space-around;
+                margin-bottom:30px;
+            }}
+
+            .card {{
+                background:#1e293b;
+                padding:20px;
+                border-radius:10px;
+                width:150px;
+                text-align:center;
+            }}
+        </style>
+    </head>
+
+    <body>
+
+        <h1>Dashboard</h1>
+
+        <div class="grid">
+            <div class="card">High Intent<br>{values[0] if len(values)>0 else 0}</div>
+            <div class="card">Medium Intent<br>{values[1] if len(values)>1 else 0}</div>
+            <div class="card">Low Intent<br>{values[2] if len(values)>2 else 0}</div>
+        </div>
+
+        <canvas id="chart"></canvas>
+
+        <script>
+        new Chart(document.getElementById("chart"), {{
+            type: 'bar',
+            data: {{
+                labels: {labels},
+                datasets: [{{
+                    label: 'Users',
+                    data: {values},
+                    backgroundColor: ['#22c55e','#eab308','#ef4444']
+                }}]
+            }}
+        }});
+        </script>
+
+    </body>
+    </html>
+    """
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return """
+    <html>
+    <body style="background:#0f172a;color:white;text-align:center;padding:100px;">
+        <h2>Login</h2>
+
+        <input id="username" placeholder="Username"><br><br>
+        <input id="password" type="password" placeholder="Password"><br><br>
+
+        <button onclick="login()">Login</button>
+
+        <script>
+        async function login(){
+            const res = await fetch('/login',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({
+                    username:username.value,
+                    password:password.value
+                })
+            });
+
+            const data = await res.json();
+
+            if(data.success){
+                localStorage.setItem("api_key", data.api_key);
+                localStorage.setItem("client_id", data.client_id);
+                window.location = "/app";
+            } else {
+                alert("Login failed");
+            }
+        }
+        </script>
+    </body>
+    </html>
+    """
+
+
+
+@app.get("/pricing", response_class=HTMLResponse)
+def pricing():
+    return """
+    <html>
+    <body style="background:#0f172a;color:white;text-align:center;padding:50px;">
+
+        <h1>Pricing</h1>
+
+        <div style="display:flex;justify-content:center;gap:30px;">
+
+            <div style="background:#1e293b;padding:20px;border-radius:10px;">
+                <h2>Free</h2>
+                <p>100 API calls</p>
+                <p>Basic analytics</p>
+            </div>
+
+            <div style="background:#22c55e;padding:20px;border-radius:10px;color:black;">
+                <h2>Pro</h2>
+                <p>Unlimited API calls</p>
+                <p>Automation + Webhooks</p>
+                <p>Priority support</p>
+                <button onclick="upgrade()">Upgrade</button>
+            </div>
+
+        </div>
+
+        <script>
+        async function upgrade(){
+
+            const api_key = localStorage.getItem("api_key");
+
+            await fetch('/upgrade',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({api_key:api_key})
+            });
+
+            alert("Upgraded to Pro!");
+        }
+        </script>
+
+    </body>
+    </html>
+    """
