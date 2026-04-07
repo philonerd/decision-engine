@@ -365,7 +365,13 @@ def app_ui():
                 "<br><b>Action:</b> " + data.auto_action;
         }
         </script>
-
+        <button onClick="logout()">logout</button>
+        <script>
+        function logout(){
+            localStorage.clear();
+            window.location= "/login";
+        }
+        </script>
     </body>
     </html>
     """
@@ -497,24 +503,39 @@ def dashboard():
     conn = sqlite3.connect("data.db")
     c = conn.cursor()
 
+    # Segment counts (for cards + charts)
     c.execute("SELECT segment, COUNT(*) FROM user_history GROUP BY segment")
     data = c.fetchall()
 
+    # Recent users (for table)
+    c.execute("SELECT user_id, segment, prediction FROM user_history ORDER BY timestamp DESC LIMIT 20")
+    rows = c.fetchall()
+
     conn.close()
 
+    # Chart data
     labels = [d[0] for d in data]
     values = [d[1] for d in data]
+
+    # Table rows
+    table_rows = "".join([
+        f"<tr onclick=\"window.location='/user/{r[0]}'\" style='cursor:pointer;'>"
+        f"<td>{r[0]}</td><td>{r[1]}</td><td>{round(r[2],2)}</td></tr>"
+        for r in rows
+    ])
 
     return f"""
     <html>
     <head>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
         <style>
             body {{
                 background:#0f172a;
                 color:white;
                 font-family: 'Segoe UI';
                 padding:40px;
+                text-align:center;
             }}
 
             .grid {{
@@ -530,6 +551,32 @@ def dashboard():
                 width:150px;
                 text-align:center;
             }}
+
+            table {{
+                border-collapse: collapse;
+                width:60%;
+                margin:auto;
+                margin-bottom:30px;
+            }}
+
+            th, td {{
+                padding:10px;
+                border:1px solid #334155;
+            }}
+
+            tr:hover {{
+                background:#1e293b;
+            }}
+
+            button {{
+                margin-top:20px;
+                padding:10px 20px;
+                background:#ef4444;
+                border:none;
+                border-radius:8px;
+                color:white;
+                cursor:pointer;
+            }}
         </style>
     </head>
 
@@ -537,32 +584,68 @@ def dashboard():
 
         <h1>Dashboard</h1>
 
+        <!-- USER TABLE -->
+        <h3>Recent Users</h3>
+        <table>
+            <tr><th>User</th><th>Segment</th><th>Score</th></tr>
+            {table_rows}
+        </table>
+
+        <!-- CARDS -->
         <div class="grid">
             <div class="card">High Intent<br>{values[0] if len(values)>0 else 0}</div>
             <div class="card">Medium Intent<br>{values[1] if len(values)>1 else 0}</div>
             <div class="card">Low Intent<br>{values[2] if len(values)>2 else 0}</div>
         </div>
 
+        <!-- CHARTS -->
         <canvas id="chart"></canvas>
+        <br><br>
+        <canvas id="chart2"></canvas>
+
+        <!-- LOGOUT -->
+        <button onclick="logout()">Logout</button>
 
         <script>
+
+        const labels = {labels};
+        const values = {values};
+
+        // BAR CHART
         new Chart(document.getElementById("chart"), {{
             type: 'bar',
             data: {{
-                labels: {labels},
+                labels: labels,
                 datasets: [{{
                     label: 'Users',
-                    data: {values},
+                    data: values,
                     backgroundColor: ['#22c55e','#eab308','#ef4444']
                 }}]
             }}
         }});
+
+        // PIE CHART
+        new Chart(document.getElementById("chart2"), {{
+            type: 'pie',
+            data: {{
+                labels: labels,
+                datasets: [{{
+                    data: values
+                }}]
+            }}
+        }});
+
+        // LOGOUT FUNCTION
+        function logout(){{
+            localStorage.clear();
+            window.location = "/login";
+        }}
+
         </script>
 
     </body>
     </html>
     """
-
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
@@ -643,6 +726,48 @@ def pricing():
 
             alert("Upgraded to Pro!");
         }
+        </script>
+
+    </body>
+    </html>
+    """
+
+
+@app.get("/user/{user_id}", response_class=HTMLResponse)
+def user_detail(user_id: int):
+
+    return f"""
+    <html>
+    <head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    </head>
+
+    <body style="background:#0f172a;color:white;text-align:center;padding:40px;">
+
+        <h1>User {user_id} Analytics</h1>
+
+        <canvas id="chart"></canvas>
+
+        <script>
+        async function loadData(){{
+            const client_id = localStorage.getItem("client_id");
+
+            const res = await fetch(`/user-history?client_id=${{client_id}}&user_id=${user_id}`);
+            const data = await res.json();
+
+            const labels = data.history.map(x => x.timestamp);
+            const scores = data.history.map(x => x.prediction);
+
+            new Chart(document.getElementById("chart"), {{
+                type:'line',
+                data:{{
+                    labels:labels,
+                    datasets:[{{label:'Score',data:scores}}]
+                }}
+            }});
+        }}
+
+        loadData();
         </script>
 
     </body>
