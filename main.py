@@ -278,6 +278,7 @@ def home():
     </html>
     """
 
+
 @app.get("/app", response_class=HTMLResponse)
 def app_ui():
     return """
@@ -288,24 +289,43 @@ def app_ui():
                 background:#0f172a;
                 color:white;
                 font-family: 'Segoe UI';
-                text-align:center;
+                margin:0;
                 padding:40px;
+                text-align:center;
+            }
+
+            .navbar {
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                padding:15px 25px;
+                background:#020617;
+                border-radius:10px;
+                margin-bottom:40px;
+            }
+
+            .nav-links a {
+                color:white;
+                margin-right:15px;
+                text-decoration:none;
             }
 
             .card {
                 background:#1e293b;
                 padding:30px;
                 border-radius:15px;
-                width:300px;
+                width:320px;
                 margin:auto;
+                box-shadow: 0 10px 20px rgba(0,0,0,0.3);
             }
 
             input {
                 width:90%;
-                padding:10px;
+                padding:12px;
                 margin:10px 0;
                 border-radius:8px;
                 border:none;
+                outline:none;
             }
 
             button {
@@ -314,6 +334,17 @@ def app_ui():
                 background:#22c55e;
                 border:none;
                 border-radius:8px;
+                cursor:pointer;
+                color:white;
+                font-size:16px;
+            }
+
+            .logout-btn {
+                padding:8px 15px;
+                background:#ef4444;
+                border:none;
+                border-radius:8px;
+                color:white;
                 cursor:pointer;
             }
 
@@ -328,8 +359,20 @@ def app_ui():
 
     <body>
 
+        <!-- NAVBAR -->
+        <div class="navbar">
+            <h2>Sentria AI</h2>
+            <div class="nav-links">
+                <a href="/app">App</a>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/pricing">Pricing</a>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
         <h1>AI Predictor</h1>
 
+        <!-- CARD -->
         <div class="card">
             <input id="time" placeholder="Time Spent">
             <input id="sessions" placeholder="Sessions">
@@ -341,40 +384,62 @@ def app_ui():
         </div>
 
         <script>
-        async function predict(){
-            const res = await fetch('/api/predict',{
-                method:'POST',
-                headers:{
-                    'Content-Type':'application/json',
-                    'x-api-key':localStorage.getItem("api_key")
-                },
-                body:JSON.stringify({
-                    client_id: localStorage.getItem("client_id"),
-                    user_id:1,
-                    time_spent:parseFloat(time.value),
-                    sessions:parseInt(sessions.value),
-                    actions:parseInt(actions.value)
-                })
-            });
 
-            const data = await res.json();
-
-            result.innerHTML =
-                "<b>Segment:</b> " + data.segment +
-                "<br><b>Score:</b> " + data.score +
-                "<br><b>Action:</b> " + data.auto_action;
+        // AUTO LOGIN CHECK
+        if(!localStorage.getItem("api_key")){
+            window.location = "/login";
         }
-        </script>
-        <button onClick="logout()">logout</button>
-        <script>
+
+        async function predict(){
+
+            const api_key = localStorage.getItem("api_key");
+            const client_id = localStorage.getItem("client_id");
+
+            result.innerHTML = "Loading...";
+
+            try {
+                const res = await fetch('/api/predict',{
+                    method:'POST',
+                    headers:{
+                        'Content-Type':'application/json',
+                        'x-api-key': api_key
+                    },
+                    body:JSON.stringify({
+                        client_id: client_id,
+                        user_id: 1,
+                        time_spent:parseFloat(time.value),
+                        sessions:parseInt(sessions.value),
+                        actions:parseInt(actions.value)
+                    })
+                });
+
+                const data = await res.json();
+
+                if(data.detail){
+                    result.innerHTML = "<span style='color:red'>" + data.detail + "</span>";
+                } else {
+                    result.innerHTML =
+                        "<b>Segment:</b> " + data.segment +
+                        "<br><b>Score:</b> " + data.score +
+                        "<br><b>Action:</b> " + data.auto_action;
+                }
+
+            } catch (e) {
+                result.innerHTML = "<span style='color:red'>Server error</span>";
+            }
+        }
+
         function logout(){
             localStorage.clear();
-            window.location= "/login";
+            window.location = "/login";
         }
+
         </script>
+
     </body>
     </html>
     """
+
 
 @app.get("/user-history")
 def get_user_history(client_id: str, user_id: int):
@@ -503,21 +568,19 @@ def dashboard():
     conn = sqlite3.connect("data.db")
     c = conn.cursor()
 
-    # Segment counts (for cards + charts)
+    # Segment counts
     c.execute("SELECT segment, COUNT(*) FROM user_history GROUP BY segment")
     data = c.fetchall()
 
-    # Recent users (for table)
+    # Recent users
     c.execute("SELECT user_id, segment, prediction FROM user_history ORDER BY timestamp DESC LIMIT 20")
     rows = c.fetchall()
 
     conn.close()
 
-    # Chart data
     labels = [d[0] for d in data]
     values = [d[1] for d in data]
 
-    # Table rows
     table_rows = "".join([
         f"<tr onclick=\"window.location='/user/{r[0]}'\" style='cursor:pointer;'>"
         f"<td>{r[0]}</td><td>{r[1]}</td><td>{round(r[2],2)}</td></tr>"
@@ -535,7 +598,24 @@ def dashboard():
                 color:white;
                 font-family: 'Segoe UI';
                 padding:40px;
-                text-align:center;
+                margin:0;
+            }}
+
+            /* NAVBAR */
+            .navbar {{
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                padding:15px 25px;
+                background:#020617;
+                border-radius:10px;
+                margin-bottom:30px;
+            }}
+
+            .nav-links a {{
+                color:white;
+                margin-right:15px;
+                text-decoration:none;
             }}
 
             .grid {{
@@ -546,31 +626,43 @@ def dashboard():
 
             .card {{
                 background:#1e293b;
-                padding:20px;
-                border-radius:10px;
-                width:150px;
+                padding:25px;
+                border-radius:15px;
+                width:180px;
                 text-align:center;
+                box-shadow: 0 10px 20px rgba(0,0,0,0.3);
             }}
 
             table {{
                 border-collapse: collapse;
-                width:60%;
+                width:70%;
                 margin:auto;
                 margin-bottom:30px;
+                background:#020617;
+                border-radius:10px;
+                overflow:hidden;
             }}
 
             th, td {{
-                padding:10px;
+                padding:12px;
                 border:1px solid #334155;
+                text-align:center;
+            }}
+
+            th {{
+                background:#1e293b;
+            }}
+
+            tr {{
+                transition:0.2s;
             }}
 
             tr:hover {{
                 background:#1e293b;
             }}
 
-            button {{
-                margin-top:20px;
-                padding:10px 20px;
+            .logout-btn {{
+                padding:8px 15px;
                 background:#ef4444;
                 border:none;
                 border-radius:8px;
@@ -582,10 +674,21 @@ def dashboard():
 
     <body>
 
-        <h1>Dashboard</h1>
+        <!-- NAVBAR -->
+        <div class="navbar">
+            <h2>Sentria AI</h2>
+            <div class="nav-links">
+                <a href="/app">App</a>
+                <a href="/dashboard">Dashboard</a>
+                <a href="/pricing">Pricing</a>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
 
-        <!-- USER TABLE -->
-        <h3>Recent Users</h3>
+        <h1 style="text-align:center;">Dashboard</h1>
+
+        <!-- TABLE -->
+        <h3 style="text-align:center;">Recent Users</h3>
         <table>
             <tr><th>User</th><th>Segment</th><th>Score</th></tr>
             {table_rows}
@@ -602,9 +705,6 @@ def dashboard():
         <canvas id="chart"></canvas>
         <br><br>
         <canvas id="chart2"></canvas>
-
-        <!-- LOGOUT -->
-        <button onclick="logout()">Logout</button>
 
         <script>
 
@@ -635,7 +735,6 @@ def dashboard():
             }}
         }});
 
-        // LOGOUT FUNCTION
         function logout(){{
             localStorage.clear();
             window.location = "/login";
@@ -646,6 +745,7 @@ def dashboard():
     </body>
     </html>
     """
+
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
